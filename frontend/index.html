@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการสต็อกสินค้า</title>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align to top */
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 700px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 0;
+            font-size: 1.6em;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background-color: #fdfdfd;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: calc(100% - 22px); /* Account for padding/border */
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-right: 10px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:active {
+            background-color: #216e9e;
+        }
+
+        button:last-child {
+            margin-right: 0;
+        }
+
+        .result-area {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #eaf6f4;
+            border: 1px solid #d4edda;
+            border-radius: 8px;
+            font-size: 0.95em;
+            color: #28a745; /* Green for success/info */
+            white-space: pre-wrap; /* Preserve newlines */
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .error-message {
+            color: #dc3545; /* Red for errors */
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .image-preview {
+            max-width: 150px;
+            height: auto;
+            display: block;
+            margin-top: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ระบบจัดการสต็อกสินค้า</h1>
+
+        <div class="card">
+            <h2>ตรวจสอบสต็อก</h2>
+            <button onclick="getAllStock()">แสดงสต็อกทั้งหมด</button>
+            <div id="allStockResult" class="result-area"></div>
+
+            <p>หรือตรวจสอบตามชื่อสินค้า:</p>
+            <input type="text" id="productNameCheck" placeholder="ชื่อสินค้า">
+            <button onclick="getStockByName()">ตรวจสอบ</button>
+            <div id="singleStockResult" class="result-area"></div>
+        </div>
+
+        <div class="card">
+            <h2>จัดการสต็อก</h2>
+            <p>เลือกสินค้าและระบุจำนวน:</p>
+            <select id="productSelect" class="product-select">
+                <option value="">-- เลือกสินค้า --</option>
+                </select>
+            <input type="number" id="quantityInput" placeholder="จำนวน" min="1">
+            <button onclick="updateStock('add')">เพิ่มสต็อก</button>
+            <button onclick="updateStock('sell')">ลดสต็อก (ขาย)</button>
+            <div id="updateStockResult" class="result-area"></div>
+        </div>
+    </div>
+
+    <script>
+        // กำหนด URL ของ Backend API ของคุณ
+        // ถ้าคุณรัน Flask บน localhost:5000, มันจะเป็น 'http://localhost:5000'
+        // หากคุณ Deploy บน Heroku/Google Cloud Run, ให้เปลี่ยนเป็น URL ที่ Deploy แล้ว
+        const API_BASE_URL = 'http://192.168.1.8:8000'; // <-- Use YOUR computer's actual IP
+        document.addEventListener('DOMContentLoaded', async () => {
+            // โหลดรายการสินค้าเมื่อหน้าโหลดเสร็จ
+            await loadProductOptions();
+        });
+
+        async function loadProductOptions() {
+            const selectElement = document.getElementById('productSelect');
+            selectElement.innerHTML = '<option value="">-- กำลังโหลดสินค้า --</option>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stock/all`);
+                const data = await response.json();
+
+                if (response.ok && data.data) {
+                    selectElement.innerHTML = '<option value="">-- เลือกสินค้า --</option>'; // Clear loading text
+                    data.data.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.name;
+                        option.textContent = product.name;
+                        selectElement.appendChild(option);
+                    });
+                } else {
+                    selectElement.innerHTML = '<option value="">-- ไม่สามารถโหลดสินค้าได้ --</option>';
+                    displayResult('updateStockResult', `Error: ${data.error || data.message}`, true);
+                }
+            } catch (error) {
+                console.error('Error loading product options:', error);
+                selectElement.innerHTML = '<option value="">-- ข้อผิดพลาดในการโหลด --</option>';
+                displayResult('updateStockResult', `Error loading product options: ${error.message}`, true);
+            }
+        }
+
+
+        async function getAllStock() {
+            const resultDiv = document.getElementById('allStockResult');
+            resultDiv.innerHTML = 'กำลังดึงข้อมูลสต็อก...';
+            resultDiv.className = 'result-area'; // Reset class
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stock/all`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.data && data.data.length > 0) {
+                        let stockMessage = 'สต็อกสินค้าทั้งหมด:\n';
+                        data.data.forEach(product => {
+                            stockMessage += `${product.name}: ${product.quantity} ชิ้น\n`;
+                        });
+                        displayResult('allStockResult', stockMessage);
+                    } else {
+                        displayResult('allStockResult', data.message || 'ไม่มีข้อมูลสินค้าในสต็อกเลยค่ะ');
+                    }
+                } else {
+                    displayResult('allStockResult', `Error: ${data.error || 'Unknown error'}`, true);
+                }
+            } catch (error) {
+                console.error('Error fetching all stock:', error);
+                displayResult('allStockResult', `ข้อผิดพลาดในการเชื่อมต่อ: ${error.message}`, true);
+            }
+        }
+
+        async function getStockByName() {
+            const productName = document.getElementById('productNameCheck').value.trim();
+            const resultDiv = document.getElementById('singleStockResult');
+            resultDiv.innerHTML = ''; // Clear previous results
+            resultDiv.className = 'result-area'; // Reset class
+
+            if (!productName) {
+                displayResult('singleStockResult', 'กรุณาระบุชื่อสินค้าที่ต้องการตรวจสอบ', true);
+                return;
+            }
+
+            resultDiv.innerHTML = `กำลังตรวจสอบ "${productName}"...`;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stock/${encodeURIComponent(productName)}`);
+                const data = await response.json();
+
+                if (response.ok && data.data) {
+                    let message = `${data.data.name} มีอยู่ในสต็อก ${data.data.quantity} ชิ้นค่ะ`;
+                    if (data.data.imageUrl) {
+                        message += ' (พร้อมรูปภาพ)';
+                        const img = document.createElement('img');
+                        img.src = data.data.imageUrl;
+                        img.alt = data.data.name;
+                        img.className = 'image-preview';
+                        resultDiv.appendChild(document.createTextNode(message));
+                        resultDiv.appendChild(img);
+                        resultDiv.className = 'result-area';
+                    } else {
+                        displayResult('singleStockResult', message);
+                    }
+                } else {
+                    displayResult('singleStockResult', data.message || `ไม่พบสินค้าชื่อ "${productName}" ในสต็อกค่ะ`, true);
+                }
+            } catch (error) {
+                console.error('Error fetching stock by name:', error);
+                displayResult('singleStockResult', `ข้อผิดพลาดในการเชื่อมต่อ: ${error.message}`, true);
+            }
+        }
+
+        async function updateStock(type) {
+            const productName = document.getElementById('productSelect').value;
+            const quantity = parseInt(document.getElementById('quantityInput').value);
+            const resultDiv = document.getElementById('updateStockResult');
+            resultDiv.innerHTML = ''; // Clear previous results
+            resultDiv.className = 'result-area'; // Reset class
+
+            if (!productName) {
+                displayResult('updateStockResult', 'กรุณาเลือกสินค้า', true);
+                return;
+            }
+            if (isNaN(quantity) || quantity <= 0) {
+                displayResult('updateStockResult', 'กรุณาระบุจำนวนที่ถูกต้อง (ต้องเป็นตัวเลขบวก)', true);
+                return;
+            }
+
+            const payload = {
+                productName: productName,
+                quantityChange: type === 'add' ? quantity : -quantity, // positive for add, negative for sell
+                transactionType: type === 'add' ? 'Add' : 'Sell'
+            };
+
+            resultDiv.innerHTML = `กำลังดำเนินการ ${type === 'add' ? 'เพิ่ม' : 'ลด'}สต็อก...`;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/stock/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayResult('updateStockResult', data.message);
+                    document.getElementById('quantityInput').value = ''; // Clear input
+                    await loadProductOptions(); // Reload product list to refresh stock if needed (though not displayed here)
+                } else {
+                    displayResult('updateStockResult', `Error: ${data.error || 'Unknown error'}`, true);
+                }
+            } catch (error) {
+                console.error('Error updating stock:', error);
+                displayResult('updateStockResult', `ข้อผิดพลาดในการเชื่อมต่อ: ${error.message}`, true);
+            }
+        }
+
+        function displayResult(elementId, message, isError = false) {
+            const resultDiv = document.getElementById(elementId);
+            resultDiv.textContent = message;
+            if (isError) {
+                resultDiv.classList.add('error-message');
+            } else {
+                resultDiv.classList.remove('error-message');
+            }
+        }
+    </script>
+</body>
+</html>
